@@ -44,7 +44,7 @@ function App() {
 
   // This is your Elastic Beanstalk URL.
   // Example: 'http://visual-sql-builder-env.eba-xyz.us-east-1.elasticbeanstalk.com'
-  const BACKEND_URL = 'http://Visual-sql-builder-env.eba-t2mhycuh.ap-south-1.elasticbeanstalk.com';
+  const BACKEND_URL = 'https://Visual-sql-builder-env.eba-t2mhycuh.ap-south-1.elasticbeanstalk.com';
 
   useEffect(() => {
     const fetchSchema = async () => {
