@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import LeftSchemaPanel from './components/LeftSchemaPanel';
@@ -14,12 +13,13 @@ const initialConfig = {
     queryType: 'DQL',
     action: 'SELECT',
     selectedTable: '',
-    selectedColumns: [], // Now objects: { name: 'col', aggregation: 'NONE' }
-    joins: [], // NEW: For visual JOINs
-    filters: [], // This is for WHERE
-    groupBy: [],
-    having: [], // NEW: For HAVING clause
-    orderBy: { column: '', direction: 'ASC' },
+    selectedTableAlias: 'A', // NEW
+    selectedColumns: [], // { table: 'A', name: 'col', aggregation: 'NONE' }
+    joins: [], // { id, type, targetTable, alias, onCol1, onCol2 }
+    filters: [], // { id, tableAlias, column, operator, value }
+    groupBy: [], // { alias, column }
+    having: [], // { id, tableAlias, column, aggregation, operator, value }
+    orderBy: { tableAlias: '', column: '', aggregation: 'NONE', direction: 'ASC' },
     limit: '',
     values: {},
     newTableName: '',
@@ -27,8 +27,17 @@ const initialConfig = {
     alterType: 'RENAME_TABLE',
     renameTo: '',
     addColumn: { name: '', type: 'TEXT' },
-    dropColumn: '', // NEW: For ALTER TABLE...DROP COLUMN
+    dropColumn: '',
 };
+
+// =================================================================
+// This is your Backend URL.
+// 1. FOR LOCAL "HYBRID DEMO":
+const BACKEND_URL = 'http://localhost:3001';
+// 2. FOR FULL "CLOUD DEPLOYMENT":
+// const BACKEND_URL = 'httpss://YOUR_ELASTIC_BEANSTALK_URL'; // <-- PASTE YOUR CLOUD URL
+// =================================================================
+
 
 function App() {
   const [schema, setSchema] = useState({ tables: [] });
@@ -42,15 +51,13 @@ function App() {
   const [showAISidebar, setShowAISidebar] = useState(false);
   const [dbType, setDbType] = useState('mysql');
 
-  // This is your Elastic Beanstalk URL.
-  // Example: 'http://visual-sql-builder-env.eba-xyz.us-east-1.elasticbeanstalk.com'
-  const BACKEND_URL = 'https://Visual-sql-builder-env.eba-t2mhycuh.ap-south-1.elasticbeanstalk.com';
+  // NEW: State for the "smart" chart
+  const [chartConfig, setChartConfig] = useState({ xKey: '', yKey: '' });
 
   useEffect(() => {
     const fetchSchema = async () => {
-      console.log(`Fetching schema for ${dbType}...`);
+      console.log(`Fetching schema for ${dbType} from ${BACKEND_URL}...`);
       try {
-        // <-- 1. CHANGE THIS URL
         const response = await fetch(`${BACKEND_URL}/api/schema?dbType=${dbType}`);
         if (!response.ok) {
             const err = await response.json();
@@ -64,7 +71,7 @@ function App() {
       }
     };
     fetchSchema();
-  }, [queryResult, dbType, BACKEND_URL]); // Add BACKEND_URL to dependency array
+  }, [queryResult, dbType]); // Re-fetch on queryResult OR dbType change
 
   useEffect(() => {
     const newSql = buildSqlFromConfig(queryConfig, dbType);
@@ -80,35 +87,40 @@ function App() {
         action: queryConfig.action,
         dbType: dbType
     };
-    // Pre-fill confirm box for TRUNCATE and DROP
     if (queryConfig.action === 'DROP TABLE' || queryConfig.action === 'TRUNCATE TABLE') {
         newConf.newTableName = tableName;
     }
     setQueryConfig(newConf);
+    setChartConfig({ xKey: '', yKey: '' }); // Reset chart
     setIsSqlModified(false);
   };
   
   // NEW: Handles both checking a column and changing its aggregation
-  const handleColumnChange = (columnName, aggregation = null) => {
+  const handleColumnChange = (tableName, columnName, aggregation = null) => {
     setQueryConfig(prevConfig => {
         const newCols = [...prevConfig.selectedColumns];
-        const colIndex = newCols.findIndex(c => c.name === columnName);
+        // Find the alias for the table
+        const tableAlias = (tableName === prevConfig.selectedTable)
+            ? (prevConfig.selectedTableAlias || tableName)
+            : (prevConfig.joins.find(j => j.targetTable === tableName)?.alias || tableName);
+
+        const colIndex = newCols.findIndex(c => c.name === columnName && c.table === tableAlias);
 
         if (colIndex > -1) {
-            // Column is already selected
             if (aggregation === null) {
-                // This was a "toggle off" click (checkbox unchecked)
+                // Checkbox unchecked
                 newCols.splice(colIndex, 1);
             } else {
-                // This was an aggregation change from the dropdown
+                // Aggregation changed
                 newCols[colIndex].aggregation = aggregation;
             }
         } else {
-            // Column is new, add it (this happens on first check)
-            newCols.push({ name: columnName, aggregation: 'NONE' });
+            // Checkbox checked
+            newCols.push({ table: tableAlias, name: columnName, aggregation: 'NONE' });
         }
         return { ...prevConfig, selectedColumns: newCols };
     });
+    setChartConfig({ xKey: '', yKey: '' }); // Reset chart
     setIsSqlModified(false);
   };
   
@@ -129,18 +141,17 @@ function App() {
 
   const handleRunQuery = async () => {
     if (!editedSql.trim() || editedSql.startsWith('--')) {
-      alert("Cannot run an empty or placeholder query.");
-      return;
+      alert("Cannot run an empty or placeholder query."); return;
     }
     setIsLoading(true);
     setQueryResult(null);
+    setChartConfig({ xKey: '', yKey: '' }); // Reset chart on new query
     try {
         const startTime = performance.now();
-        // <-- 2. CHANGE THIS URL
         const response = await fetch(`${BACKEND_URL}/api/query`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sql: editedSql, dbType: dbType }), // Pass the dbType
+            body: JSON.stringify({ sql: editedSql, dbType: dbType }),
         });
         const result = await response.json();
         const endTime = performance.now();
@@ -159,15 +170,15 @@ function App() {
   };
   
   const handleParseSql = () => {
-      // MODIFIED: Pass the full schema so the parser can handle SELECT *
       const newConfig = parseSqlToConfig(editedSql, schema, dbType);
       if (newConfig) {
           const fullConfig = { ...initialConfig, ...newConfig };
           setQueryConfig(fullConfig);
+          setChartConfig({ xKey: '', yKey: '' }); // Reset chart
           setIsSqlModified(false);
           alert("Successfully synced SQL from editor to the visual builder!");
       } else {
-          alert("Unable to map SQL to visual builder. The parser only supports simple, single-table SELECT statements.");
+          alert("Unable to map SQL to visual builder. Parser only supports simple queries.");
       }
   };
 
@@ -191,7 +202,6 @@ function App() {
                     dbType={dbType}
                     onDbTypeChange={(newDbType) => {
                         setDbType(newDbType);
-                        // Reset everything when DB type changes
                         handleTableSelect(''); 
                     }} 
                 />
@@ -205,10 +215,8 @@ function App() {
                         <Panel defaultSize={20} minSize={15} maxSize={30} className="!overflow-y-auto bg-white border-r border-slate-200">
                            <LeftSchemaPanel
                                 schema={schema}
-                                selectedTable={queryConfig.selectedTable}
-                                selectedColumns={queryConfig.selectedColumns}
+                                config={queryConfig} // Pass full config
                                 onTableSelect={handleTableSelect}
-                                // MODIFIED: Pass the new handler
                                 onColumnChange={handleColumnChange}
                             />
                         </Panel>
@@ -218,7 +226,12 @@ function App() {
                 <Panel>
                     <PanelGroup direction="vertical">
                         <Panel defaultSize={55} minSize={20} className="p-4 bg-slate-50 overflow-auto">
-                            <VisualBuilder schema={schema} config={queryConfig} onConfigChange={handleQueryConfigChange} dbType={dbType} />
+                            <VisualBuilder 
+                                schema={schema} 
+                                config={queryConfig} 
+                                onConfigChange={handleQueryConfigChange} 
+                                dbType={dbType} 
+                            />
                         </Panel>
                         <PanelResizeHandle className="h-1.5 bg-slate-200 hover:bg-blue-500 transition-colors" />
                         <Panel defaultSize={45} minSize={20} className="flex flex-col">
@@ -228,7 +241,18 @@ function App() {
                 </Panel>
                 <PanelResizeHandle className="w-1.5 bg-slate-200 hover:bg-blue-500 transition-colors" />
                 <Panel defaultSize={35} minSize={25}>
-                    <ResultsPanel result={queryResult} isLoading={isLoading} onRunQuery={handleRunQuery} queryConfig={queryConfig} onConfigChange={setQueryConfig} />
+                    {/* THE FIX IS HERE: We are now passing the chartConfig state and 
+                      the onChartConfigChange updater function down to the ResultsPanel.
+                    */}
+                    <ResultsPanel 
+                        result={queryResult} 
+                        isLoading={isLoading} 
+                        onRunQuery={handleRunQuery} 
+                        queryConfig={queryConfig} 
+                        onConfigChange={setQueryConfig}
+                        chartConfig={chartConfig}
+                        onChartConfigChange={setChartConfig}
+                    />
                 </Panel>
             </PanelGroup>
 
@@ -238,7 +262,6 @@ function App() {
                     onUseQuery={handleUseAIQuery} 
                     onClose={() => setShowAISidebar(false)}
                     dbType={dbType} 
-                    // Pass the backend URL as a prop
                     backendUrl={BACKEND_URL}
                 />
             )}
