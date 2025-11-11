@@ -33,7 +33,7 @@ const initialConfig = {
 // =================================================================
 // This is your Backend URL.
 // 1. FOR LOCAL "HYBRID DEMO":
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = 'https://lengthier-nita-paramorphous.ngrok-free.dev';
 // 2. FOR FULL "CLOUD DEPLOYMENT":
 // const BACKEND_URL = 'httpss://YOUR_ELASTIC_BEANSTALK_URL'; // <-- PASTE YOUR CLOUD URL
 // =================================================================
