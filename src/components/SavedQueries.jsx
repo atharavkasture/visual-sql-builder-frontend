@@ -8,7 +8,7 @@ const SavedQueries = ({ onClose, onLoad }) => {
         const saved = JSON.parse(localStorage.getItem('savedQueries') || '[]');
         setQueries(saved);
     }, []);
-    
+
     const handleLoad = (config) => {
         onLoad(config);
         onClose();
@@ -27,7 +27,11 @@ const SavedQueries = ({ onClose, onLoad }) => {
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
                 <div className="flex justify-between items-center p-4 border-b dark:border-slate-700">
                     <h2 className="text-lg font-semibold">Saved Queries</h2>
-                    <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">
+                    <button
+                        onClick={onClose}
+                        className="p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400"
+                        title="Close"
+                    >
                         <X size={20} />
                     </button>
                 </div>
@@ -38,12 +42,14 @@ const SavedQueries = ({ onClose, onLoad }) => {
                         <ul className="space-y-2">
                             {queries.map(query => (
                                 <li key={query.id} className="p-2 border rounded-md dark:border-slate-600 flex justify-between items-center">
-                                    <span className="font-medium">{query.name}</span>
+                                    <span className="font-medium text-slate-900 dark:text-slate-100"> {/* <--- CHANGED THIS LINE */}
+                                        {query.name}
+                                    </span>
                                     <div className="flex items-center gap-2">
                                         <button onClick={() => handleLoad(query.config)} className="text-sm px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
                                             Load
                                         </button>
-                                         <button onClick={() => handleDelete(query.id)} className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full" title="Delete query">
+                                        <button onClick={() => handleDelete(query.id)} className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full" title="Delete query">
                                             <Trash2 size={16} />
                                         </button>
                                     </div>
